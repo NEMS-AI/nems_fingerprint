@@ -2,8 +2,11 @@
 Package for simulating analyte mass absorption events on NEMS devices
 """
 import numpy as np
-from . import euler_bernoulli_beam as ebb
+
 from scipy import stats
+from . import euler_bernoulli_beam as ebb
+from .comsol import extract_eigenmodes, MeshInterp, COMSOLmodes
+
 
 
 class AbsorptionEvents:
@@ -98,12 +101,12 @@ class Distribution:
     
     @classmethod
     def uniform(cls, lower, upper):
-        dist = sc.stats.uniform(loc=lower, scale=upper-lower)
+        dist = stats.uniform(loc=lower, scale=upper-lower)
         return cls.from_scipy_dist(dist)
 
     @classmethod
     def normal(cls, mean, std):
-        dist = sc.stats.norm(loc=mean, scale=std)
+        dist = stats.norm(loc=mean, scale=std)
         return cls.from_scipy_dist(dist)
 
     @classmethod
@@ -124,7 +127,7 @@ def frequency_shifts(mode_shapes, masses, positions):
     positions : (n_events,) ndarray
         positions of analytes
     """
-    return -0.5 * masses * mode_shapes(positions) ** 2
+    return -0.5 * masses[:, np.newaxis] * mode_shapes(positions) ** 2
 
 
 def simulate_absorption(n_events, mode_shapes, mass_dist, position_dist, noise_dist):
@@ -205,10 +208,26 @@ class EBBSimulation(Simulation):
                 boundary_type=boundary_type,
                 mode=mode_indices,
                 x=position
-        )
+            ).T
         super().__init__(mode_shapes, **kwargs)
 
 
 class COMSOLSimulation(Simulation):
-    def __init__(self, modes_path):
+    """Mass absorption simulation on 1-dimensional Euler-Bernoulli Beam
+    
+    Parameters
+    ----------
+    boundary_type : 'clamped-clamped' | 'clamped-free'
+        type of boundary condition
+    mode_indices : list[int]
+        indices of modes to use in experiment from (1, 2, 3, ...)
+    mass_dist : Distribution
+        distribution of analyte masses
+    position_dist : Distribution
+        distribution of analyte positions
+    noise_dist : Distribution
+        distribution of noise in frequency shift measurements
+    """
+
+    def __init__(self, modes_path, mode_indices, **kwargs):
         pass

@@ -6,10 +6,7 @@ Date: 28/10/22
 """
 
 import numpy as np
-
 from scipy import spatial
-from scipy import special
-from .simulation import AbsorptionEvents, SimulatedAbsorptionEvents
 
 
 class MassPredictNN:
@@ -62,7 +59,7 @@ class MassPredictNN:
         self.selection = selection
 
         self._predictor_constants = masses / lp_norm_subset
-        self._tree = sc.spatial.KDTree(
+        self._tree = spatial.KDTree(
             data=freq_shifts / lp_norm_subset[:, np.newaxis]
         )
     

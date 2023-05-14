@@ -1,157 +1,214 @@
 """
-Synthetic data generation
-
-TODO: Implement better reprs for Sample and BeamExperiment
-
-Author: Alex Nunn
-Date: 28/10/22
-
+Package for simulating analyte mass absorption events on NEMS devices
 """
 import numpy as np
 from . import euler_bernoulli_beam as ebb
-
-from typing import Callable
-from dataclasses import dataclass
 from scipy import stats
 
-# TODO: Add better repr for sample class
-# TODO: Create class decorator that gives pretty __repr_html__
-@dataclass
-class Sample:
-    """Container for synthetic experiment data"""
-    modes: list = None
-    mass: list = None
-    position: list = None
-    noise: list = None
-    freq_shift: list = None
+
+class AbsorptionEvents:
+    """Container for the frequency-shifts and masses of analyte absorption events
+    
+    Parameters
+    ----------
+    masses : (n_events,) ndarray
+        masses of analytes for each absorption event
+    freq_shifts : (n_events, n_modes) ndarray
+        frequency shifts of analyte adsorptions
+    """
+
+    def __init__(self, masses, freq_shifts):
+        # Check inputs
+        masses = np.asanyarray(masses)
+        freq_shifts = np.asanyarray(freq_shifts)
+        
+        n_events = len(masses)
+        m, n_modes = freq_shifts.shape
+
+        if n_events != m:
+            raise ValueError(
+                'length of masses must match length of first axis freq_shift '
+                )
+        
+        # Store
+        self.masses = masses
+        self.freq_shifts = freq_shifts
+
+    @property
+    def n_modes(self):
+        """Return the number of modes measured for analyte absorption events"""
+        return self.freq_shifts.shape[1]
+    
+    @property
+    def n_events(self):
+        """Return the number of mass absorption events"""
+        return len(self.masses)
 
     def __len__(self):
-        return len(self.mass)
+        """Return number of mass absorption events"""
+        return len(self.masses)
+    
+    def __repr__(self):
+        return (
+            f'{self.__class__.__name__}(n_events={self.n_events}), '
+            f'n_modes={self.n_modes}, mean_mass={self.masses.mean()})'
+        )
+    
+
+class SimulatedAbsorptionEvents(AbsorptionEvents):
+    """Container for synthetically generated analyte absorption events
+    
+    This container extends the base class to store additional information such
+    as the mode numbers and the positions of analyte absorption. Additional
+    information can be stored by providing keywords arguments to the constructor.
+    """
+    def __init__(self, masses, freq_shifts, **kwargs):
+        super().__init__(masses, freq_shifts)
+        
+        for (key, value) in kwargs.items():
+            setattr(self, key, value)
 
 
-@dataclass
-class BeamExperiment:
-    """Configuration of artifical Euler Bernoulli experiment
+class Distribution:
+    """Class for generating random samples from a distribution
+    
+    This class wraps existing solutions to provide a consistent interface.
 
     Parameters
     ----------
-    boundary_type: str
-        type of boundary configuration of Euler-Bernoulli beam
+    sample_generator : callable(size_tup=(n1, n2, ..., n_m))
+        callable which returns array of random samples
 
-    modes : int | list[int]
-        modes to measure in artificial experiment. If an integer uses modes
-        1, 2, ..., modes otherwise uses subset of modes defined by list
-
-    mass_distribution : float | Callable | scipy.stats.rvs (optional)
-        mass distribution of analytes to sample from. If a float the every mass
-        is identical. If callable then
-            mass_distribution(n)
-        should return n samples from the mass distribution. If scipy.stats.rvs
-        then the .rvs() method is called. Default behaviour is an identical
-        distribution of 1.
-
-    noise_distribution : float | Callable | scipy.stats.rvs (optional)
-        distribution of noise for frequency measurements. If float then constant
-        noise is added to frequency measurements. If Callable then
-            noise_distribution(n)
-        is called for (n, modes) noise samples. If scipy.stats.rvs then .rvs()
-        method is called. Default behaviour is 0, for no experimental noise.
-
-    position_distriubtion : Callable | scipy.stats.rsv (optional)
-        distribution of points along the beam. Calling behaviour for Callable
-        and scipy.stats.rsv is the same as above. The default is a uniform
-        distribution.
+    Examples
+    --------
+    >>> dist = Distribution.constant(1.0)
+    >>> sample = dist.sample((3,))
+    [1.0, 1.0, 1.0]
     """
-    boundary_type: str
-    modes: int
-    mass_distribution: float = 1
-    position_distribution: Callable = stats.uniform()
-    noise_distribution: Callable = 0
+    def __init__(self, sample_generator):
+        self._sample_generator = sample_generator
 
-    def __post_init__(self):
-        # Assert defaults behaviour
-        if type(self.modes) is int:
-            self.modes = list(range(1, self.modes + 1))
+    def sample(self, size):
+        return self._sample_generator(size)
+    
+    @classmethod
+    def constant(cls, value):
+        f = lambda size_tup: np.full(size_tup, fill_value=value)
+        return cls(f)
+    
+    @classmethod
+    def uniform(cls, lower, upper):
+        dist = sc.stats.uniform(loc=lower, scale=upper-lower)
+        return cls.from_scipy_dist(dist)
 
-    def theoretical_freq_shift(self, mass, position):
-        """Returns the frequency shift predicted by theory
+    @classmethod
+    def normal(cls, mean, std):
+        dist = sc.stats.norm(loc=mean, scale=std)
+        return cls.from_scipy_dist(dist)
 
-        Parameters
-        ----------
-        mass : ndarray(n,)
-            sample of masses
-        position : ndarray(n,)
-            sample of positions
+    @classmethod
+    def from_scipy_dist(cls, dist):
+        f = lambda size_tup: dist.rvs(size=size_tup)
+        return cls(f)
 
-        Returns
-        -------
-        freq_shifts : ndarray(n, modes)
-            frequency shifts
-        """
-        if np.isscalar(mass):
-            mass = np.array([mass])
 
-        return -0.5 * mass[:, np.newaxis] * ebb.displacement(
-                boundary_type=self.boundary_type,
-                mode=self.modes,
+def frequency_shifts(mode_shapes, masses, positions):
+    """Return frequency-shifts of analyte absorptions
+    
+    Parameters
+    ----------
+    mode_shapes : callable((n_events, dim_pts) array) -> (n_events, n_modes)
+        function return vector of mode displacements at each position
+    masses : (n_events,) ndarray
+        masses of analytes
+    positions : (n_events,) ndarray
+        positions of analytes
+    """
+    return -0.5 * masses * mode_shapes(positions) ** 2
+
+
+def simulate_absorption(n_events, mode_shapes, mass_dist, position_dist, noise_dist):
+    """Return simulated mass absorption events
+    
+    Parameters
+    ----------
+    n_events : int
+        number of events
+    mode_shapes : callable((n_events, dim_pts) array) -> (n_events, n_modes)
+        function return vector of mode displacements at each position
+    mass_dist : Distribution
+        distribution of analyte masses
+    position_dist : Distribution
+        distribution of analyte positions
+    noise_dist : Distribution
+        distribution of noise in frequency shift measurements
+
+    Returns
+    -------
+    : SimulatedAbsorptionEvents
+        simulated events
+    """
+    masses = mass_dist.sample(n_events)
+    positions = position_dist.sample(n_events)
+    freq_shifts = frequency_shifts(mode_shapes, masses, positions)
+
+    noise = noise_dist.sample(freq_shifts.shape)
+
+    events = SimulatedAbsorptionEvents(
+        masses=masses,
+        freq_shifts=freq_shifts + noise,
+        positions=positions
+    )
+    return events
+
+
+class Simulation:
+    """Abstract simulation class"""
+    def __init__(self, mode_shapes, mass_dist, position_dist, noise_dist):
+        self.mode_shapes = mode_shapes
+        self.mass_dist = mass_dist
+        self.position_dist = position_dist
+        self.noise_dist = noise_dist
+
+    def sample(self, n_events):
+        """Return sample of n_events from simulation"""
+        return simulate_absorption(
+            n_events, self.mode_shapes, self.mass_dist, self.position_dist, 
+            self.noise_dist
+        )
+
+
+class EBBSimulation(Simulation):
+    """Mass absorption simulation on 1-dimensional Euler-Bernoulli Beam
+    
+    Parameters
+    ----------
+    boundary_type : 'clamped-clamped' | 'clamped-free'
+        type of boundary condition
+    mode_indices : list[int]
+        indices of modes to use in experiment from (1, 2, 3, ...)
+    mass_dist : Distribution
+        distribution of analyte masses
+    position_dist : Distribution
+        distribution of analyte positions
+    noise_dist : Distribution
+        distribution of noise in frequency shift measurements
+    """
+
+    def __init__(self, boundary_type, mode_indices, **kwargs):
+        # Define mode_shapes function
+
+        self.boundary_type = boundary_type
+        self.mode_indices = mode_indices
+        
+        mode_shapes = lambda position: ebb.displacement(
+                boundary_type=boundary_type,
+                mode=mode_indices,
                 x=position
-            ).T ** 2
-
-    def sample(self, n_samples):
-        """Return n samples from experiment
-
-        Parameters
-        ----------
-        n_samples : int
-            number of samples
-
-        Returns
-        -------
-        Sample
-        """
-        mass_sample = self._sample_dist(self.mass_distribution, n_samples)
-        position_sample = self._sample_dist(self.position_distribution, n_samples)
-        noise_sample = self._sample_dist(
-            self.noise_distribution, n_samples, len(self.modes)
         )
+        super().__init__(mode_shapes, **kwargs)
 
-        freq_shift = (
-            self.theoretical_freq_shift(mass_sample, position_sample)
-            + noise_sample
-        )
 
-        sample = Sample(
-            modes=self.modes,
-            mass=mass_sample,
-            position=position_sample,
-            noise=noise_sample,
-            freq_shift=freq_shift
-        )
-        return sample
-
-    def _sample_dist(self, dist, *args):
-        if np.isscalar(dist):
-            return np.full(shape=args, fill_value=dist)
-        try:
-            sample = dist(*args)
-            return sample
-        except TypeError:
-            sample = dist.rvs(size=args)
-            return sample
-
-    def identical_except_for(self, **kwargs):
-        keys = (
-            'boundary_type', 'modes', 'mass_distribution',
-            'position_distribution', 'noise_distribution'
-        )
-        props = {k: getattr(self, k) for k in keys}
-        props.update(kwargs)
-        return self.__class__(**props)
-
-    def __repr__(self):
-        return f'''{self.__class__.__name__}(
-    modes={self.modes},
-    mass_distribution={self.mass_distribution},
-    noise_distribution={self.noise_distribution},
-    position_distribution={self.position_distribution}
-)'''
+class COMSOLSimulation(Simulation):
+    def __init__(self, modes_path):
+        pass

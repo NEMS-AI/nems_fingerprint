@@ -7,7 +7,7 @@ from scipy import stats
 from . import euler_bernoulli_beam as ebb
 from .comsol import extract_eigenmodes, MeshInterp, COMSOLmodes
 
-
+MASS_DALTON_SQRT = 4.07497125e-14
 
 class AbsorptionEvents:
     """Container for the frequency-shifts and masses of analyte absorption events
@@ -215,10 +215,12 @@ class EBBSimulation(Simulation):
 class COMSOLSimulation(Simulation):
     """Mass absorption simulation on 1-dimensional Euler-Bernoulli Beam
     
+    Mass is assumed to be in units of Dalton
+
     Parameters
     ----------
-    boundary_type : 'clamped-clamped' | 'clamped-free'
-        type of boundary condition
+    path : str | Path
+        path of COMSOL eigenmodes in csv format with modal mass normalisation
     mode_indices : list[int]
         indices of modes to use in experiment from (1, 2, 3, ...)
     mass_dist : Distribution
@@ -229,5 +231,20 @@ class COMSOLSimulation(Simulation):
         distribution of noise in frequency shift measurements
     """
 
-    def __init__(self, modes_path, mode_indices, **kwargs):
-        pass
+    def __init__(self, path, mode_indices, **kwargs):
+        # Load mesh
+        comsol_modes = extract_eigenmodes(path)
+        n_modes = comsol_modes.n_modes
+
+        # Check mode_indices are in range
+        if any(m not in range(n_modes) for m in mode_indices):
+            raise ValueError(
+                f'Invalid mode_indices! Should be in range [0, {n_modes})'
+            )
+
+        mode_subset = comsol_modes.modes[:, mode_indices, :]
+        deflection_norm = np.linalg.norm(mode_subset, axis=-1) * MASS_DALTON_SQRT
+        mint = MeshInterp(comsol_modes.pts, deflection_norm)
+
+        super().__init__(mint, **kwargs)
+

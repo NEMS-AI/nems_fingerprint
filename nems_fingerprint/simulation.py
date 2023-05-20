@@ -4,10 +4,13 @@ Package for simulating analyte mass absorption events on NEMS devices
 import numpy as np
 
 from scipy import stats
+
 from . import euler_bernoulli_beam as ebb
-from .comsol import extract_eigenmodes, MeshInterp, COMSOLmodes
+from comsol_mesh import MeshInterp, Eigenmodes
+
 
 MASS_DALTON_SQRT = 4.07497125e-14
+
 
 class AbsorptionEvents:
     """Container for the frequency-shifts and masses of analyte absorption events
@@ -233,7 +236,7 @@ class COMSOLSimulation(Simulation):
 
     def __init__(self, path, mode_indices, **kwargs):
         # Load mesh
-        comsol_modes = extract_eigenmodes(path)
+        comsol_modes = Eigenmodes.from_csv(path)
         n_modes = comsol_modes.n_modes
 
         # Check mode_indices are in range

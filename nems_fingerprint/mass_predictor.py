@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from scipy import spatial
+from sklearn.neighbors import KNeighborsRegressor
 
 class MassPredictor(ABC):
     """
@@ -69,3 +70,15 @@ class NNPredictor(MassPredictor):
 
         mass_predictions = self._predictor_constants[idxs] * mp_norms
         return mass_predictions
+    
+class NNPredictor2(MassPredictor):
+    def fit(self):
+         self.model = KNeighborsRegressor(n_neighbors=1)
+         self.model.fit(self.freq_shifts / self.lp_norm_subset[:, np.newaxis], self.masses / self.lp_norm_subset)
+
+    def __call__(self, freq_shifts):
+        mp_norms = np.linalg.norm(freq_shifts, axis=-1)
+        unit_freq_shifts = freq_shifts / mp_norms[:, np.newaxis]
+
+        predicted_norms = self.model.predict(unit_freq_shifts)
+        mass_predictions = predicted_norms * mp_norms

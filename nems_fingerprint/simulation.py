@@ -59,6 +59,18 @@ class AbsorptionEvents:
             f'{self.__class__.__name__}(n_events={self.n_events}), '
             f'n_modes={self.n_modes}, mean_mass={self.masses.mean()})'
         )
+    def sample_events_with_replacement(self, proportion):
+        sample_size = int(self.n_events * proportion)
+
+        # Generate a list of indices based on the proportion
+        indices = np.random.choice(np.arange(self.n_events), size=sample_size, replace=True)
+
+        # Use those indices to sample from param1 and param2
+        masses = self.masses[indices]
+        freq_shifts = self.freq_shifts[indices]
+
+        sample = AbsorptionEvents(masses, freq_shifts)
+        return(sample)
     
 
 class SimulatedAbsorptionEvents(AbsorptionEvents):

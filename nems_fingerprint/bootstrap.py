@@ -1,10 +1,11 @@
 from sklearn.base import clone
 from sklearn.utils import resample
 import numpy as np
+from .mass_predictor import MassPredictor
 
 class BootstrapModel:
     """
-    A wrapper class for bootstrapping any estimator that conforms to scikit-learn's interface.
+    A wrapper class for bootstrapping any estimator that conforms to Mass Predict interface.
 
     The class supports two types of bootstrapping:
     1. Resampling with replacement: given a proportion of the original data, it samples with replacement
@@ -29,15 +30,8 @@ class BootstrapModel:
         List of trained bootstrap models.
     """
 
-    def __init__(self, estimator, n_boots, sample_proportion=None, noise_distribution=None):
-        self.estimator = estimator
-        self.n_boots = n_boots
-        self.sample_proportion = sample_proportion
-        self.noise_distribution = noise_distribution
-        self.models = []
-
-    def fit(self, X, y):
-            """
+    def __init__(self, learning_events, mp, rej_total=None, n_boots = 1, sample_proportion=None, noise_distribution=None):
+        """
             Fits the bootstrap models to the data.
 
             Parameters
@@ -46,26 +40,31 @@ class BootstrapModel:
                 The input samples.
             y : array-like of shape (n_samples,)
                 The target values.
-            """
+        """
+        self.mp = mp
+        self.n_boots = n_boots
+        self.sample_proportion = sample_proportion
+        self.noise_distribution = noise_distribution
+        self.models = []
 
-            self.models = []
-            if self.sample_proportion is not None:
-                # Bootstrapping type 1
-                n_samples = int(X.shape[0] * self.sample_proportion)
-                for _ in range(self.n_boots):
-                    X_resample, y_resample = resample(X, y, n_samples=n_samples)
-                    model = type(self.estimator)()  # Create a new instance of the same type as estimator
-                    model.fit(X_resample, y_resample)
-                    self.models.append(model)
-            elif self.noise_distribution is not None:
-                # Bootstrapping type 2
-                for _ in range(self.n_boots):
-                    X_noisy = X + self.noise_distribution.rvs(size=X.shape)
-                    model = type(self.estimator)()  # Create a new instance of the same type as estimator
-                    model.fit(X_noisy, y)
-                    self.models.append(model)
+            
+        if self.sample_proportion is not None:
+            # Bootstrapping type 1
+            for i in range(self.n_boots):
+                sampled_events = learning_events.sample_events_with_replacement(sample_proportion)
+                self.models.append(self.mp(sampled_events, rej_total))
+            
+        elif self.noise_distribution is not None:
+            # Bootstrapping type 2
+            # TODO: Re-write this implenetation to work for MassPredictor instead of sklearn estimators.
+            # for _ in range(self.n_boots):
+            #     X_noisy = X + self.noise_distribution.rvs(size=X.shape)
+            #     model = type(self.estimator)()  # Create a new instance of the same type as estimator
+            #     model.fit(X_noisy, y)
+            #     self.models.append(model)
+            pass
 
-    def predict(self, X):
+    def __call__(self, freq_shifts):
         """
         Predict using the bootstrap models.
 
@@ -82,5 +81,5 @@ class BootstrapModel:
 
         predictions = []
         for model in self.models:
-            predictions.append(model.predict(X))
-        return predictions
+            predictions.append(model(freq_shifts))
+        return np.array(predictions).T

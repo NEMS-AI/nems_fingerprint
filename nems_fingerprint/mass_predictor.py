@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import spatial
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.model_selection import GridSearchCV
 
 class MassPredictor(ABC):
     """
@@ -84,3 +85,24 @@ class NNPredictor2(MassPredictor):
         predicted_norms = self.model.predict(unit_freq_shifts)
         mass_predictions = predicted_norms * mp_norms
         return mass_predictions
+    
+
+
+class NNPredictorCV(MassPredictor):
+    def fit(self):
+            parameters = {'n_neighbors': [1,2,3,4,5,6]}
+            unit_freq_shifts = self.freq_shifts / self.lp_norm_subset[:, np.newaxis]
+            self.model = GridSearchCV(KNeighborsRegressor(), param_grid=parameters, cv=5, n_jobs=-1)
+            self.model.fit(unit_freq_shifts, self.masses / self.lp_norm_subset)
+            print("model_trained")
+
+    def __call__(self, freq_shifts):
+        mp_norms = np.linalg.norm(freq_shifts, axis=-1)
+        unit_freq_shifts = freq_shifts / mp_norms[:, np.newaxis]
+
+        predicted_norms = self.model.predict(unit_freq_shifts)
+        mass_predictions = predicted_norms * mp_norms
+        return mass_predictions
+
+
+

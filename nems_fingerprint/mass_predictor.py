@@ -2,6 +2,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 from scipy import spatial
 from sklearn.neighbors import KNeighborsRegressor
+from sklearn.svm import SVR
+
 from sklearn.model_selection import GridSearchCV
 
 class MassPredictor(ABC):
@@ -76,7 +78,6 @@ class NNPredictor2(MassPredictor):
     def fit(self):
          self.model = KNeighborsRegressor(n_neighbors=1)
          self.model.fit(self.freq_shifts / self.lp_norm_subset[:, np.newaxis], self.masses / self.lp_norm_subset)
-         print("model_trained")
 
     def __call__(self, freq_shifts):
         mp_norms = np.linalg.norm(freq_shifts, axis=-1)
@@ -94,7 +95,6 @@ class NNPredictorCV(MassPredictor):
             unit_freq_shifts = self.freq_shifts / self.lp_norm_subset[:, np.newaxis]
             self.model = GridSearchCV(KNeighborsRegressor(), param_grid=parameters, cv=5, n_jobs=-1)
             self.model.fit(unit_freq_shifts, self.masses / self.lp_norm_subset)
-            print("model_trained")
 
     def __call__(self, freq_shifts):
         mp_norms = np.linalg.norm(freq_shifts, axis=-1)
@@ -103,6 +103,28 @@ class NNPredictorCV(MassPredictor):
         predicted_norms = self.model.predict(unit_freq_shifts)
         mass_predictions = predicted_norms * mp_norms
         return mass_predictions
+
+
+class SVRPredictorCV(MassPredictor):
+    def fit(self):
+            parameters = {
+                'C': [0.1, 1, 10, 100],
+                'epsilon': [0.01, 0.1, 1],
+                'kernel': ['linear', 'rbf', 'poly'],
+                'gamma': [1e-4, 1e-3, 0.01, 0.1, 'scale', 'auto']
+            }
+            unit_freq_shifts = self.freq_shifts / self.lp_norm_subset[:, np.newaxis]
+            self.model = GridSearchCV(SVR(), param_grid=parameters, cv=5)
+            self.model.fit(unit_freq_shifts, self.masses / self.lp_norm_subset)
+
+    def __call__(self, freq_shifts):
+        mp_norms = np.linalg.norm(freq_shifts, axis=-1)
+        unit_freq_shifts = freq_shifts / mp_norms[:, np.newaxis]
+
+        predicted_norms = self.model.predict(unit_freq_shifts)
+        mass_predictions = predicted_norms * mp_norms
+        return mass_predictions
+
 
 
 

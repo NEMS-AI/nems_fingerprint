@@ -8,11 +8,11 @@ version = "0.0.1"
 authors = [
     {name = "Alex", email = "alex.nunn@pm.me"},
 ]
-description = "A package for NEMS Mass Spectroscopy"
+description = "A package for NEMS Mass Spectrometry"
 readme = "README.md"
 requires-python = ">=3.7"
 license = { file = "LICENSE" }
-keywords = ["Foo", "example", "spreading"]
+keywords = ["nems", "mass spectrometry", "NEMS"]
 
 dependencies = [
     'numpy', 'scipy'

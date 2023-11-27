@@ -250,4 +250,3 @@ class COMSOLSimulation(Simulation):
         mint = MeshInterp(comsol_modes.pts, deflection_norm)
 
         super().__init__(mint, **kwargs)
-

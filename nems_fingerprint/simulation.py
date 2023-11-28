@@ -6,7 +6,7 @@ import numpy as np
 from scipy import stats
 
 from . import euler_bernoulli_beam as ebb
-from comsol_mesh import MeshInterp, Eigenmodes
+from comsol_mesh import *
 
 
 MASS_DALTON_SQRT = 4.07497125e-14
@@ -56,7 +56,7 @@ class AbsorptionEvents:
     
     def __repr__(self):
         return (
-            f'{self.__class__.__name__}(n_events={self.n_events}), '
+            f'{self.__class__.__name__}(n_events={self.n_events}, '
             f'n_modes={self.n_modes}, mean_mass={self.masses.mean()})'
         )
     

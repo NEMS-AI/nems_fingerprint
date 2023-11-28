@@ -222,10 +222,14 @@ class COMSOLSimulation(Simulation):
 
     Parameters
     ----------
-    path : str | Path
-        path of COMSOL eigenmodes in csv format with modal mass normalisation
+    mesh : comsol_mesh.Mesh
+        mesh
+    surface : comsol_mesh.Surface
+        surface
+    modes_field : comsol_mesh.Field
+        eigenmodes
     mode_indices : list[int]
-        indices of modes to use in experiment from (1, 2, 3, ...)
+        indices of modes to use in experiment from (0, 1, 2, 3, ...)
     mass_dist : Distribution
         distribution of analyte masses
     position_dist : Distribution
@@ -233,20 +237,27 @@ class COMSOLSimulation(Simulation):
     noise_dist : Distribution
         distribution of noise in frequency shift measurements
     """
+    def __init__(self, mesh, surface, modes_field, mode_idxs, mass_dist, noise_dist):
+        self.mesh = mesh
+        self.surface = surface
+        self.modes_field = modes_field
+        self.mode_idxs = mode_idxs
 
-    def __init__(self, path, mode_indices, **kwargs):
-        # Load mesh
-        comsol_modes = Eigenmodes.from_csv(path)
-        n_modes = comsol_modes.n_modes
+        self.mass_dist = mass_dist
+        self.noise_dist = noise_dist
 
-        # Check mode_indices are in range
-        if any(m not in range(n_modes) for m in mode_indices):
-            raise ValueError(
-                f'Invalid mode_indices! Should be in range [0, {n_modes})'
-            )
+        # compute modal masses
+        self.modal_masses = modes_field.L2_norm(axis=-1)
+        
+    def sample(self, n_events):
+        _, values = self.surface.random_value_sample(
+            self.modes_field, n_samples=n_events
+        )
+        freq_shifts = -0.5 * np.linalg.norm(values, axis=-1) ** 2 / self.modal_masses
+        freq_shifts = freq_shifts[:, self.mode_idxs]
 
-        mode_subset = comsol_modes.modes[:, mode_indices, :]
-        deflection_norm = np.linalg.norm(mode_subset, axis=-1) * MASS_DALTON_SQRT
-        mint = MeshInterp(comsol_modes.pts, deflection_norm)
 
-        super().__init__(mint, **kwargs)
+        masses = self.mass_dist.sample(n_events)
+        noise = self.noise_dist.sample(freq_shifts.shape)
+
+        return AbsorptionEvents(masses, freq_shifts + noise)

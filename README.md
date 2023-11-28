@@ -60,35 +60,38 @@ To simulate frequency adsorption events on NEMS devices with bulk 3 dimensional 
 
 
 ```python
+# Load COMSOL mesh
+comsol_objs = COMSOLObjects.from_file('data/shear_device.mphtxt')
+cobj = comsol_objs[0]
+mesh = Mesh.from_comsol_obj(cobj)
 
+# Load device eigenmodes
+cemodes = COMSOLEigenmodes.from_file('data/shear_device_eigenmodes.csv')
+modes_field = Field.from_comsol_field(mesh, cemodes)
 
-def surface_sample_generator(n_samples):
-    x0 = 0.3
-    y1, y2 = 0.2, 1.2
-    z1, z2 = -0.6, 0.6
-    
-    samples = np.zeros((n_samples, 3))
-    samples[:, 0] = x0
-    samples[:, 1] = np.random.uniform(y1, y2, n_samples)
-    samples[:, 2] = np.random.uniform(z1, z2, n_samples)
-    return samples
+# Load top surface
+surfaces = surfaces_from_comsol_obj(mesh, cobj)
+top_surface = surfaces[-1]
 
-position_dist = Distribution(surface_sample_generator)
-
+# Define simulation
+M0 = 1.0
+mode_indices = [0, 1, 2, 3]
 comsol_sim = COMSOLSimulation(
-    'COMSOL_device_eigenmodes.csv',             # path to COMSOL eigenmodes export
-    mode_indices=[0, 1, 2],                     # 1st, 2nd, 3rd mode (zero indexing)
-    mass_dist=Distribution.constant(1000e3),    # constant mass 1000kDa
-    position_dist=position_dist,
-    noise_dist=Distribution.constant(0.0)       # no noise
+    mesh=mesh, 
+    surface=top_surface, 
+    modes_field=modes_field, 
+    mode_idxs=mode_indices,
+    mass_dist=Distribution.constant(M0),
+    noise_dist=Distribution.constant(0.0)
 )
 
+# Learning phase
 learning_events = comsol_sim.sample(n_events=10000)
 mass_predictor = MassPredictNN(learning_events)
 
+# Measurement phase
 measurement_phase_shifts = comsol_sim.sample(n_events=2000).freq_shifts
-masses_rel = mass_predictor(measurement_phase_shifts) / M0
-masses_rel_err = masses_rel - 1
+predicted_masses = mass_predictor(measurement_phase_shifts)
 ```
 
 For further usage examples see notebooks in `examples/` directory of this repository.
